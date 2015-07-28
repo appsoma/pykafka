@@ -519,6 +519,24 @@ class BalancedConsumer():
         log.debug("Rebalance triggered by topic change")
         self._rebalance()
 
+    def get_last_committed_offsets(self):
+        """Get the offsets of the consumer
+        
+        :returns dict with partition id as key and offset of the partition as value
+        """
+        if not self._consumer:
+            raise ConsumerStoppedException("Internal consumer is stopped")
+        return self._consumer.get_last_committed_offsets()
+
+    def get_partition_lags(self):
+        """Get the number of pending messages per partition for the consumer
+        
+        :returns dict with partition id as key and lag of the partition as value
+        """
+        if not self._consumer:
+            raise ConsumerStoppedException("Internal consumer is stopped")
+        return self._consumer.get_partition_lags()
+    
     def reset_offsets(self, partition_offsets=None):
         """Reset offsets for the specified partitions
 
