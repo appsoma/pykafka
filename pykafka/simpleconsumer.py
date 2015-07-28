@@ -290,6 +290,35 @@ class SimpleConsumer():
                 raise StopIteration
             yield message
 
+    def get_last_committed_offsets(self):
+        """Get the offsets of the consumer
+        
+        :returns dict with partition id as key and offset of the partition as value
+        """
+        if not self._consumer_group:
+            raise Exception("consumer group must be specified to commit offsets")
+
+        offsets = {}
+        for p in self.topic.partitions:
+            partition = self.topic.partitions[p]
+            req = PartitionOffsetFetchRequest(self.topic.name, p)
+            resp = partition.leader.fetch_consumer_group_offsets(self._consumer_group,[req])
+            offsets[p] = resp.topics[self.topic.name][p].offset
+
+        return offsets
+
+    def get_partition_lags(self):
+        """Get the number of pending messages per partition for the consumer
+        
+        :returns dict with partition id as key and lag of the partition as value
+        """
+        part_read_pointers = self.get_last_committed_offsets()
+        latest_available_offsets = self.topic.latest_available_offsets()
+        lag = {}
+        for k,v in latest_available_offsets.items():
+            lag[k] = v.offset[0] - part_read_pointers[k]        
+        return lag
+
     def consume(self, block=True):
         """Get one message from the consumer.
 
