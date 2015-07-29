@@ -68,7 +68,9 @@ class BalancedConsumer():
                  zookeeper_connect='127.0.0.1:2181',
                  zookeeper=None,
                  auto_start=True,
-                 reset_offset_on_start=False):
+                 reset_offset_on_start=False,
+                 retry_backoff_ms=100,
+                 max_retries=3):
         """Create a BalancedConsumer instance
 
         :param topic: The topic this consumer should consume
@@ -142,6 +144,12 @@ class BalancedConsumer():
             internal offset counter to `self._auto_offset_reset` and commit that
             offset immediately upon starting up
         :type reset_offset_on_start: bool
+        :param max_retries: How many times to attempt to fetch messages
+            before raising an error.
+        :type max_retries: int
+        :param retry_backoff_ms: The amount of time (in milliseconds) to
+            back off during fetch request retries.
+        :type retry_backoff_ms: int
         """
         self._cluster = cluster
         self._consumer_group = consumer_group
@@ -173,6 +181,9 @@ class BalancedConsumer():
         )
         self._partitions = set()
         self._setting_watches = True
+
+	self._max_retries = max_retries
+        self._retry_backoff_ms = retry_backoff_ms
 
         self._topic_path = '/consumers/{group}/owners/{topic}'.format(
             group=self._consumer_group,
@@ -282,7 +293,9 @@ class BalancedConsumer():
             offsets_commit_max_retries=self._offsets_commit_max_retries,
             auto_offset_reset=self._auto_offset_reset,
             reset_offset_on_start=reset_offset_on_start,
-            auto_start=start
+            auto_start=start,
+            retry_backoff_ms=self._retry_backoff_ms,
+            max_retries=self._max_retries
         )
 
     def _decide_partitions(self, participants):
