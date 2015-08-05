@@ -305,8 +305,13 @@ class SimpleConsumer():
         for p in self.topic.partitions:
             partition = self.topic.partitions[p]
             req = PartitionOffsetFetchRequest(self.topic.name, p)
-            resp = partition.leader.fetch_consumer_group_offsets(group, [req])
+            #resp = partition.leader.fetch_consumer_group_offsets(group, [req])
+            resp = self._offset_manager.fetch_consumer_group_offsets(group, [req])
+
             offsets[p] = resp.topics[self.topic.name][p].offset
+            #log.info("METaDATA "+str(resp.topics[self.topic.name][p].metadata) )
+            #log.info("ERRVAL "+str(resp.topics[self.topic.name][p].err) )
+            log.info("GET LAST COM OFF PART="+str(p)+" OFFSETS[P]="+str(offsets[p]) )
 
         return offsets
 
@@ -319,7 +324,8 @@ class SimpleConsumer():
         latest_available_offsets = self.topic.latest_available_offsets()
         lag = {}
         for k,v in latest_available_offsets.items():
-            lag[k] = v.offset[0] - part_read_pointers[k]        
+            lag[k] = v.offset[0] - part_read_pointers[k]
+            log.info("GET PART LAG PART="+str(k)+"V.OFFSET="+str(v.offset)+" V.OFFSET[0]="+str(v.offset[0])+" PART_READ_PTRS[K]="+str(part_read_pointers[k])+" LAG[K]="+str(lag[k]) )
         return lag
 
     def consume(self, block=True):
