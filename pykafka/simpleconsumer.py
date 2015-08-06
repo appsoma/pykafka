@@ -62,7 +62,9 @@ class SimpleConsumer():
                  auto_offset_reset=OffsetType.LATEST,
                  consumer_timeout_ms=-1,
                  auto_start=True,
-                 reset_offset_on_start=False):
+                 reset_offset_on_start=False,
+                 retry_backoff_ms=100,
+                 max_retries=3):
         """Create a SimpleConsumer.
 
         Settings and default values are taken from the Scala
@@ -127,6 +129,12 @@ class SimpleConsumer():
             internal offset counter to `self._auto_offset_reset` and commit that
             offset immediately upon starting up
         :type reset_offset_on_start: bool
+        :param max_retries: How many times to attempt to fetch messages
+            before raising an error.
+        :type max_retries: int
+        :param retry_backoff_ms: The amount of time (in milliseconds) to
+            back off during fetch request retries.
+        :type retry_backoff_ms: int
         """
         self._cluster = cluster
         self._consumer_group = consumer_group
@@ -153,6 +161,9 @@ class SimpleConsumer():
         self._auto_commit_enable = auto_commit_enable
         self._auto_commit_interval_ms = auto_commit_interval_ms
         self._last_auto_commit = time.time()
+
+	self._max_retries = max_retries
+        self._retry_backoff_ms = retry_backoff_ms
 
         self._discover_offset_manager()
 
@@ -614,19 +625,27 @@ class SimpleConsumer():
                                   owned_partition.partition.id,
                                   owned_partition.message_count)
             if partition_reqs:
-                try:
-                    response = broker.fetch_messages(
-                        [a for a in partition_reqs.itervalues() if a],
-                        timeout=self._fetch_wait_max_ms,
-                        min_bytes=self._fetch_min_bytes
-                    )
-                except SocketDisconnectedError:
-                    # If the broker dies while we're supposed to stop,
-                    # it's fine, and probably an integration test.
-                    if not self._running:
-                        return
-                    else:
-                        raise
+                attempts = 0
+                success = False
+		while not success:
+                    try:
+                        attempts += 1
+                        response = broker.fetch_messages(
+                            [a for a in partition_reqs.itervalues() if a],
+                            timeout=self._fetch_wait_max_ms,
+                            min_bytes=self._fetch_min_bytes
+                        )
+                        success = True
+                    except SocketDisconnectedError:
+                        # If the broker dies while we're supposed to stop,
+                        # it's fine, and probably an integration test.
+                        if not self._running:
+                            return
+                        elif attempts > self._max_retries:
+                            raise
+                        log.warning('Broker %s:%s disconnected. Retrying.',
+                                  broker.host, broker.port)
+                        time.sleep(self._retry_backoff_ms / 1000)
 
                 parts_by_error = build_parts_by_error(response, self._partitions_by_id)
                 # release the lock in these cases, since resolving the error
