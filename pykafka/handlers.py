@@ -18,9 +18,9 @@ limitations under the License.
 """
 __all__ = ["ResponseFuture", "Handler", "ThreadingHandler", "RequestHandler"]
 import atexit
+import functools
 import threading
-import Queue
-
+from .utils.compat import Queue, Empty
 from collections import namedtuple
 
 
@@ -68,10 +68,12 @@ class Handler(object):
 
 class ThreadingHandler(Handler):
     """A handler. that uses a :class:`threading.Thread` to perform its work"""
-    QueueEmptyError = Queue.Empty
-    Queue = Queue.Queue
+    QueueEmptyError = Empty
+    Queue = Queue
     Event = threading.Event
     Lock = threading.Lock
+    # turn off RLock's super annoying default logging
+    RLock = functools.partial(threading.RLock, verbose=False)
 
     def spawn(self, target, *args, **kwargs):
         t = threading.Thread(target=target, *args, **kwargs)
@@ -130,7 +132,7 @@ class RequestHandler(object):
                     if task.future:
                         res = self.connection.response()
                         task.future.set_response(res)
-                except Exception, e:
+                except Exception as e:
                     if task.future:
                         task.future.set_error(e)
                 finally:
